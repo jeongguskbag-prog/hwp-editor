@@ -60,7 +60,11 @@ class MainActivity : AppCompatActivity() {
     private val createDoc = registerForActivityResult(CreateDoc()) { uri ->
         val bytes = pendingSave
         pendingSave = null
-        if (uri == null || bytes == null) return@registerForActivityResult // 사용자가 취소
+        if (uri == null || bytes == null) {
+            // 사용자가 취소 → 편집기에 알려 "저장하고 종료" 같은 대기 동작을 버리게 함 (메시지 없음)
+            js("hwpApp.onSaved(false, '')")
+            return@registerForActivityResult
+        }
         io.execute {
             try {
                 contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
