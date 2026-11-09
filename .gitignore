@@ -1,0 +1,11 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+*.keystore
+*.jks
+# 엔진(26MB)은 빌드할 때 scripts/fetch-engine.sh 로 받음
+app/src/main/assets/www/engine/

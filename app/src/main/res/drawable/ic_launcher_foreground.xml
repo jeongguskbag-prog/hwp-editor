@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 문서 + 펜. evenOdd 한 경로라 안드로이드 13 테마(단색) 아이콘에도 그대로 쓰임 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="M36,26 H62 L74,38 V80 A4,4 0 0 1 70,84 H36 A4,4 0 0 1 32,80 V30 A4,4 0 0 1 36,26 Z M60,28 V40 H72 Z M40,48 H60 V52 H40 Z M40,58 H56 V62 H40 Z M40,68 H50 V72 H40 Z M84,46 L90,52 L66,76 L58,78 L60,70 Z" />
+</vector>
