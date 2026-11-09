@@ -25,7 +25,10 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 #title { flex: 1; min-width: 80px; margin-left: 6px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: keep-all; }
 
 #scroller { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; position: relative; padding: 12px 0 40vh; }
-#pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+/* 페이지 목록은 가장 넓은 쪽만큼 넓어짐(max-content) → 확대해서 화면보다 넓어져도 왼쪽 끝까지 스크롤됨.
+   (그냥 가운데 정렬하면 넘친 왼쪽 부분이 스크롤 범위 밖으로 잘림) 화면보다 좁을 때는 min-width 로 가운데 정렬 */
+#pages { display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: max-content; min-width: 100%; padding: 0 8px; }
 .page { position: relative; background: #fff; box-shadow: var(--page-shadow); flex: none; }
 .page > svg { display: block; width: 100%; height: 100%; }
 .page .pno { position: absolute; right: 6px; bottom: -18px; font-size: 11px; color: var(--muted); }

@@ -184,12 +184,19 @@ scroller.addEventListener('scroll', () => { if (S.pos) moveIme(); }, { passive: 
 
 function posFromHit(h) {
   if (h.cellPath && h.cellPath.length) {
+    // 표 칸이면 [{controlIndex, cellIndex, cellParaIndex}] 형식. 글상자·그림 속 글자는 [[n,n,n]] 형식(innerControlIdx)이라
+    // 다른 엔진 함수가 필요함 → 아직 지원하지 않는다고 알림 (잘못된 값으로 엉뚱한 곳에 글자가 들어가지 않게)
+    const isCell = Number.isInteger(h.parentParaIndex) && h.cellPath.every((c) => c && !Array.isArray(c)
+      && Number.isInteger(c.controlIndex) && Number.isInteger(c.cellIndex) && Number.isInteger(c.cellParaIndex));
+    if (!isCell) return { unsupported: true };
     return { k: 'c', s: h.sectionIndex, pp: h.parentParaIndex, path: h.cellPath.map((c) => ({ controlIndex: c.controlIndex, cellIndex: c.cellIndex, cellParaIndex: c.cellParaIndex })), o: h.charOffset };
   }
   return { k: 'b', s: h.sectionIndex, p: h.paragraphIndex, o: h.charOffset };
 }
 
 function hitAt(pageIndex, x, y) {
+  // 엔진은 그린 적 있는(배치가 끝난) 쪽에서만 위치를 찾을 수 있어서, 편집 뒤 아직 안 그린 쪽이면 먼저 그림
+  if (S.pages[pageIndex] && S.pages[pageIndex].dirty) renderPage(pageIndex);
   const h = JSON.parse(S.doc.hitTest(pageIndex, x, y));
   if (h == null || h.sectionIndex == null) return null;
   return posFromHit(h);
@@ -205,6 +212,7 @@ pagesBox.addEventListener('click', (e) => {
   let pos = null;
   try { pos = hitAt(i, x, y); } catch (err) { /* 빈 곳 */ }
   if (!pos) return;
+  if (pos.unsupported) { toast('글상자·그림 안의 글자는 아직 편집할 수 없어요'); return; }
   if (S.composing) ime.blur(); // 조합 중이면 먼저 끝냄
   S.pos = pos;
   S.lastKind = '';
@@ -422,7 +430,7 @@ function moveV(dir) {
   const y = dir < 0 ? caretRect.y - 2 : caretRect.y + caretRect.height + 2;
   let pos = null;
   try { pos = hitAt(caretRect.pageIndex, caretRect.x, y); } catch { /* 끝 */ }
-  if (pos) { S.pos = pos; S.lastKind = ''; placeCaret(); }
+  if (pos && !pos.unsupported) { S.pos = pos; S.lastKind = ''; placeCaret(); }
 }
 
 // ---------- 문서 열기 · 새 문서 · 저장 ----------
@@ -553,9 +561,14 @@ $('docClose').onclick = () => { $('docView').hidden = true; };
 // ---------- 확대·축소 ----------
 function setZoom(scale, fit) {
   if (!S.doc) return;
+  // 확대·축소 후에도 화면 가운데에 보던 곳이 그대로 가운데에 오도록 비율로 기억
+  const cx = (scroller.scrollLeft + scroller.clientWidth / 2) / Math.max(pagesBox.scrollWidth, 1);
+  const cy = (scroller.scrollTop + scroller.clientHeight / 2) / Math.max(pagesBox.scrollHeight, 1);
   S.fit = fit;
   S.scale = fit ? computeFitScale() : Math.min(4, Math.max(0.2, scale));
   applySizes();
+  scroller.scrollLeft = cx * pagesBox.scrollWidth - scroller.clientWidth / 2;
+  scroller.scrollTop = cy * pagesBox.scrollHeight - scroller.clientHeight / 2;
   placeCaret(false);
 }
 $('btnZoomIn').onclick = () => setZoom(S.scale * 1.25, false);
