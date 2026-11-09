@@ -576,7 +576,29 @@ $('btnZoomOut').onclick = () => setZoom(S.scale / 1.25, false);
 $('btnZoomFit').onclick = () => setZoom(0, true);
 window.addEventListener('resize', () => { if (S.doc && S.fit) setZoom(0, true); });
 
+// ---------- 종료 ----------
+/** 문서를 닫고 첫 화면으로 (브라우저에서 시험할 때 종료 대신) */
+function closeDocument() {
+  for (const p of S.pages) { observer.unobserve(p.el); p.el.remove(); }
+  S.pages = []; S.visible.clear();
+  S.doc = null; S.pos = null; S.name = '';
+  S.undo = []; S.redo = [];
+  caretEl.remove(); caretPage = -1;
+  ime.blur();
+  setDirty(false);
+  updateUndoButtons();
+  $('docName').textContent = '문서 없음';
+  $('empty').hidden = false;
+}
+function exitApp() {
+  if (S.composing) ime.blur();
+  if (!confirmDiscard()) return;
+  if (host) host.exit();
+  else closeDocument();
+}
+
 // ---------- 버튼 ----------
+$('btnExit').onclick = exitApp;
 $('btnOpen').onclick = openFile;
 $('emptyOpen').onclick = openFile;
 $('btnNew').onclick = newDocument;
