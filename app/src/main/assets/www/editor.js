@@ -434,8 +434,29 @@ function moveV(dir) {
 }
 
 // ---------- 문서 열기 · 새 문서 · 저장 ----------
-function confirmDiscard() {
-  return !S.dirty || window.confirm('저장하지 않은 변경 내용이 있어요. 버리고 계속할까요?');
+// 저장 안 한 내용 확인. 안드로이드 WebView 는 브라우저 확인 창(confirm)을 띄우지 않고 바로 "취소" 로 처리하므로
+// 화면 안의 시트로 묻는다. 결과: 'save' | 'discard' | 'cancel'
+function askUnsaved(actionLabel) {
+  return new Promise((resolve) => {
+    const sheet = $('unsavedSheet');
+    $('discardBtn').textContent = `저장하지 않고 ${actionLabel}`;
+    sheet.hidden = false;
+    sheet.onclick = (e) => {
+      const b = e.target.closest('button');
+      if (!b && e.target !== sheet) return; // 시트 바깥(어두운 곳)을 누르면 취소
+      sheet.hidden = true;
+      sheet.onclick = null;
+      resolve(b ? b.dataset.c : 'cancel');
+    };
+  });
+}
+/** 저장 안 한 내용이 있으면 물어보고 then() 실행. "저장" 을 고르면 저장이 끝난 뒤에 실행 */
+async function guardUnsaved(actionLabel, then) {
+  if (S.composing) ime.blur();
+  if (!S.dirty) { then(); return; }
+  const choice = await askUnsaved(actionLabel);
+  if (choice === 'discard') then();
+  else if (choice === 'save') { S.afterSave = then; openSaveMenu(); }
 }
 
 function loadDocument(doc, name) {
@@ -474,9 +495,7 @@ function openBytes(bytes, name) {
 }
 
 function openFile() {
-  if (!confirmDiscard()) return;
-  if (host) host.openFile();
-  else $('fileInput').click();
+  guardUnsaved('열기', () => { if (host) host.openFile(); else $('fileInput').click(); });
 }
 $('fileInput').addEventListener('change', async (e) => {
   const f = e.target.files[0];
@@ -485,7 +504,9 @@ $('fileInput').addEventListener('change', async (e) => {
 });
 
 function newDocument() {
-  if (!confirmDiscard()) return;
+  guardUnsaved('새 문서 만들기', createNewDocument);
+}
+function createNewDocument() {
   try {
     const doc = HwpDocument.createEmpty();
     E(doc.createBlankDocument());
@@ -505,7 +526,7 @@ $('saveMenu').addEventListener('click', (e) => {
   if (!b && e.target !== $('saveMenu')) return;
   $('saveMenu').hidden = true;
   const fmt = b ? b.dataset.fmt : 'cancel';
-  if (fmt === 'cancel') return;
+  if (fmt === 'cancel') { S.afterSave = null; return; }
   saveAs(fmt === 'same' ? S.fmt : fmt);
 });
 
@@ -542,8 +563,12 @@ function onSaved(ok, nameOrMsg) {
     $('docName').textContent = S.name;
     setDirty(false);
     toast(`저장했어요: ${S.name}`);
-  } else if (nameOrMsg) {
-    toast(`저장하지 못했어요: ${nameOrMsg}`, 4000);
+    const next = S.afterSave; // "저장하고 종료/열기" 의 나머지
+    S.afterSave = null;
+    if (next) setTimeout(next, 300);
+  } else {
+    S.afterSave = null; // 저장 실패·취소면 종료 등은 하지 않음
+    if (nameOrMsg) toast(`저장하지 못했어요: ${nameOrMsg}`, 4000);
   }
 }
 
@@ -591,10 +616,7 @@ function closeDocument() {
   $('empty').hidden = false;
 }
 function exitApp() {
-  if (S.composing) ime.blur();
-  if (!confirmDiscard()) return;
-  if (host) host.exit();
-  else closeDocument();
+  guardUnsaved('종료', () => { if (host) host.exit(); else closeDocument(); });
 }
 
 // ---------- 버튼 ----------
@@ -627,7 +649,8 @@ window.hwpApp = {
   handleBack() {
     if (!$('saveMenu').hidden) { $('saveMenu').hidden = true; return; }
     if (!$('docView').hidden) { $('docView').hidden = true; return; }
-    if (confirmDiscard() && host) host.exit();
+    if (!$('unsavedSheet').hidden) { $('unsavedSheet').click(); return; } // 열린 확인 창은 취소
+    exitApp();
   },
   isDirty: () => S.dirty,
 };

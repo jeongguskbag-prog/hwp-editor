@@ -53,6 +53,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .sheetTitle { font-weight: 700; margin-bottom: 4px; }
 .docBox { max-height: 85vh; }
 #docText { flex: 1; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0; }
+.sheetBox button.danger { background: #b91c1c; }
 .sheetBox button.ghost { background: #e5e7eb; color: #111827; }
 
 #toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: 90vw;
