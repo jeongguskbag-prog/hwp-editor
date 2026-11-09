@@ -1,0 +1,65 @@
+:root {
+  --bar: #1f3a8a;
+  --bar-fg: #ffffff;
+  --bg: #e5e7eb;
+  --page-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+  --caret: #1a56db;
+  --fg: #111827;
+  --muted: #6b7280;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111827; --fg: #e5e7eb; --muted: #9ca3af; --bar: #172554; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; -webkit-tap-highlight-color: transparent; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+
+#bar { flex: none; display: flex; align-items: center; gap: 2px; padding: 6px 6px; padding-top: max(6px, env(safe-area-inset-top));
+  background: var(--bar); color: var(--bar-fg); overflow-x: auto; }
+.tb { flex: none; min-width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: inherit; font-size: 20px; }
+.tb.small { font-size: 13px; min-width: 44px; }
+.tb:active { background: rgba(255, 255, 255, .18); }
+.tb:disabled { opacity: .35; }
+.sep { flex: none; width: 1px; height: 24px; background: rgba(255, 255, 255, .3); margin: 0 4px; }
+#title { flex: 1; min-width: 80px; margin-left: 6px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: keep-all; }
+
+#scroller { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; position: relative; padding: 12px 0 40vh; }
+/* 페이지 목록은 가장 넓은 쪽만큼 넓어짐(max-content) → 확대해서 화면보다 넓어져도 왼쪽 끝까지 스크롤됨.
+   (그냥 가운데 정렬하면 넘친 왼쪽 부분이 스크롤 범위 밖으로 잘림) 화면보다 좁을 때는 min-width 로 가운데 정렬 */
+#pages { display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: max-content; min-width: 100%; padding: 0 8px; }
+.page { position: relative; background: #fff; box-shadow: var(--page-shadow); flex: none; }
+.page > svg { display: block; width: 100%; height: 100%; }
+.page .pno { position: absolute; right: 6px; bottom: -18px; font-size: 11px; color: var(--muted); }
+
+#caret { position: absolute; width: 2px; background: var(--caret); pointer-events: none; animation: blink 1s steps(1) infinite; z-index: 2; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 입력칸: 커서 자리에 두되 보이지 않게. 글자 크기 16px 이상이어야 iOS·일부 안드로이드가 확대하지 않음 */
+#ime { position: absolute; left: 0; top: 0; width: 2px; height: 20px; padding: 0; border: 0; margin: 0; opacity: 0;
+  font-size: 16px; resize: none; overflow: hidden; color: transparent; background: transparent; caret-color: transparent; z-index: -1; }
+
+#empty { max-width: 420px; margin: 18vh auto 0; padding: 0 20px; text-align: center; word-break: keep-all; }
+#empty .hint { color: var(--muted); font-size: 14px; line-height: 1.6; }
+.legal { margin-top: 36px; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.legal a { color: inherit; }
+.emptyBtns { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+.emptyBtns button, .sheetBox button { font-size: 16px; padding: 12px 18px; border-radius: 10px; border: 0; background: var(--bar); color: #fff; }
+
+.sheet { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+.sheetBox { width: 100%; max-width: 480px; background: #fff; color: #111827; border-radius: 16px 16px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 8px; }
+.sheetTitle { font-weight: 700; margin-bottom: 4px; }
+.docBox { max-height: 85vh; }
+#docText { flex: 1; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0; }
+.sheetBox button.ghost { background: #e5e7eb; color: #111827; }
+
+#toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: 90vw;
+  background: rgba(17, 24, 39, .92); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .2s;
+  pointer-events: none; word-break: keep-all; z-index: 20; }
+#toast.show { opacity: 1; }
+#busy { position: fixed; inset: 0; background: rgba(0, 0, 0, .25); display: flex; align-items: center; justify-content: center; gap: 10px; color: #fff; z-index: 30; }
+.spin { width: 26px; height: 26px; border: 3px solid rgba(255, 255, 255, .4); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+[hidden] { display: none !important; }

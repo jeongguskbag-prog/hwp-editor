@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>HWP 편집기</title>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<header id="bar">
+  <button id="btnExit" class="tb" title="종료" aria-label="종료">✕</button>
+  <span class="sep"></span>
+  <button id="btnOpen" class="tb" title="열기" aria-label="열기">📂</button>
+  <button id="btnNew" class="tb" title="새 문서" aria-label="새 문서">📄</button>
+  <button id="btnSave" class="tb" title="저장" aria-label="저장">💾</button>
+  <span class="sep"></span>
+  <button id="btnUndo" class="tb" title="되돌리기" aria-label="되돌리기" disabled>↶</button>
+  <button id="btnRedo" class="tb" title="다시 하기" aria-label="다시 하기" disabled>↷</button>
+  <span class="sep"></span>
+  <button id="btnZoomOut" class="tb" title="축소" aria-label="축소">－</button>
+  <button id="btnZoomFit" class="tb small" title="화면 너비에 맞춤" aria-label="화면 너비에 맞춤">맞춤</button>
+  <button id="btnZoomIn" class="tb" title="확대" aria-label="확대">＋</button>
+  <div id="title"><span id="docName">문서 없음</span><span id="dirty" hidden> •</span></div>
+</header>
+
+<main id="scroller">
+  <div id="empty">
+    <p><strong>HWP · HWPX 문서를 열거나 새 문서를 만드세요.</strong></p>
+    <p class="hint">문서를 누르면 그 자리에 커서가 놓이고 바로 입력할 수 있어요. 표 안 칸도 편집할 수 있어요.</p>
+    <div class="emptyBtns"><button id="emptyOpen">📂 문서 열기</button><button id="emptyNew">📄 새 문서</button></div>
+    <p class="legal">
+      본 제품은 한글과컴퓨터의 한/글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.<br>
+      HWP 엔진: <a href="#" data-doc="engine/LICENSE">rhwp (MIT)</a> ·
+      <a href="#" data-doc="engine/notices/THIRD_PARTY_LICENSES.md">오픈소스 라이선스</a>
+    </p>
+  </div>
+  <div id="pages"></div>
+</main>
+
+<!-- 키보드 입력을 받는 보이지 않는 입력칸. 커서 위치로 옮겨 다녀서 한글 조합창이 커서 옆에 뜸 -->
+<textarea id="ime" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="문서 입력"></textarea>
+
+<div id="saveMenu" class="sheet" hidden>
+  <div class="sheetBox">
+    <div class="sheetTitle">저장</div>
+    <button data-fmt="same">같은 형식으로 저장</button>
+    <button data-fmt="hwp">HWP 로 저장 (.hwp)</button>
+    <button data-fmt="hwpx">HWPX 로 저장 (.hwpx)</button>
+    <button data-fmt="cancel" class="ghost">취소</button>
+  </div>
+</div>
+
+<div id="docView" class="sheet" hidden>
+  <div class="sheetBox docBox"><pre id="docText"></pre><button id="docClose" class="ghost">닫기</button></div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="busy" hidden><div class="spin"></div><span id="busyText">불러오는 중…</span></div>
+<input type="file" id="fileInput" accept=".hwp,.hwpx,application/x-hwp,application/haansofthwp,application/vnd.hancom.hwp,application/hwp+zip,application/vnd.hancom.hwpx" hidden>
+
+<script type="module" src="editor.js"></script>
+</body>
+</html>
