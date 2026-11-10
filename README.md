@@ -1,4 +1,4 @@
-# HWP 편집기 (가칭)
+# HWP 편집기
 
 휴대폰에서 HWP·HWPX 문서를 열고, 고치고, 저장하는 안드로이드 앱입니다.
 
@@ -17,6 +17,16 @@ bash scripts/fetch-engine.sh      # 엔진 받기 (한 번)
 ./gradlew assembleDebug           # app/build/outputs/apk/debug/app-debug.apk
 ```
 GitHub Actions(`.github/workflows/build.yml`)가 푸시·PR 마다 같은 순서로 빌드하고 Artifacts 에 `HwpEditor-debug` 를 올립니다.
+
+## 출시용(서명) 빌드
+- 패키지 이름: `com.jeongguskbag.hwpeditor` (Play 출시 후 변경 불가)
+- 서명 정보는 GitHub Secrets 로만 받음: `HWPEDITOR_KEYSTORE_BASE64`, `HWPEDITOR_KEYSTORE_PASSWORD`, `HWPEDITOR_KEY_ALIAS`, `HWPEDITOR_KEY_PASSWORD`
+- 만들기: Actions → **Release build** → Run workflow → Artifacts 의 `HwpEditor-release` 에 `app-release.aab`(Play 업로드용), `app-release.apk`, `mapping.txt`
+
+## Play 스토어 출시
+- 올리는 순서: `store/PLAY-UPLOAD.md` · 등록 문구·가격: `store/LISTING.md` · 테스터 모집: `store/TESTERS.md`
+- 개인정보처리방침: `docs/privacy/index.html` → https://jeongguskbag-prog.github.io/hwp-editor/privacy/ (Settings → Pages → `main` / `docs`)
+- 그래픽: `store/icon-512.png`, `store/feature-graphic-ko.png`, `store/feature-graphic-en.png`
 
 ## 브라우저에서 편집 화면만 시험하기
 `app/src/main/assets/www/` 를 아무 정적 웹 서버로 열면 됩니다 (엔진을 받은 뒤). 파일 열기는 브라우저 파일 선택, 저장은 다운로드로 동작합니다.
