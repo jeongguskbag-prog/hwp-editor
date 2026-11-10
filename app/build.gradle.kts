@@ -12,11 +12,27 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
+    }
+
+    // 출시용 서명: 키 파일과 비밀번호는 저장소에 넣지 않고 환경 변수로만 받음
+    // (GitHub Actions 에서는 Secrets → .github/workflows/release.yml 이 넘겨줌).
+    // 값이 없으면 release 빌드는 서명 없이 만들어짐 (빌드 확인용).
+    val releaseKeystore = System.getenv("HWPEDITOR_KEYSTORE_FILE")
+    signingConfigs {
+        if (!releaseKeystore.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("HWPEDITOR_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("HWPEDITOR_KEY_ALIAS")
+                keyPassword = System.getenv("HWPEDITOR_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (!releaseKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
