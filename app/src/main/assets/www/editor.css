@@ -64,3 +64,31 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .spin { width: 26px; height: 26px; border: 3px solid rgba(255, 255, 255, .4); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 [hidden] { display: none !important; }
+
+/* 글자 크기 */
+#btnSize { display: flex; align-items: baseline; gap: 1px; padding: 0 6px; }
+#btnSize .szA { font-size: 17px; font-weight: 700; }
+#btnSize #szNow { font-size: 11px; opacity: .85; }
+.muted { color: #6b7280; font-weight: 400; font-size: 13px; }
+.seg { display: flex; gap: 6px; }
+.sheetBox .seg button { flex: 1; font-size: 13px; padding: 9px 6px; background: #e5e7eb; color: #111827; word-break: keep-all; }
+.sheetBox .seg button.on { background: var(--bar); color: #fff; }
+.sizeGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.sheetBox .sizeGrid button { padding: 10px 0; background: #f3f4f6; color: #111827; font-size: 15px; }
+.sheetBox .sizeGrid button.cur { outline: 2px solid var(--bar); background: #dbeafe; }
+
+/* 펜 */
+#btnPen[aria-pressed="true"] { background: rgba(255, 255, 255, .28); }
+.penLayer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; touch-action: none; cursor: crosshair; }
+body.penOn #caret { display: none; }
+#penBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 15;
+  background: #fff; color: #111827; border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, .3); padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+.penRow { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.pc { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; background: var(--c); }
+.pc.on { border-color: #93c5fd; box-shadow: 0 0 0 2px #1d4ed8; }
+.pw { width: 40px; height: 34px; border-radius: 8px; border: 0; background: #f3f4f6; display: flex; align-items: center; justify-content: center; }
+.pw i { display: block; width: 22px; border-radius: 3px; background: #111827; }
+.pw.on { background: #dbeafe; outline: 2px solid #1d4ed8; }
+.vsep { width: 1px; height: 26px; background: #e5e7eb; }
+.pb { font-size: 15px; padding: 9px 14px; border-radius: 10px; border: 0; background: #e5e7eb; color: #111827; }
+.pb.main { background: var(--bar); color: #fff; font-weight: 700; }

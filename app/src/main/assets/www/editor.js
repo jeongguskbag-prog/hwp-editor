@@ -10,6 +10,11 @@
 //   안드로이드 키보드가 keydown 을 주지 않아도 "지움(백스페이스)" 을 알아챔. 한글 조합 중에는 조합 글자를
 //   문서에 바로 넣고 바꿔 가며 보여 줌(compositionupdate).
 // - 되돌리기는 엔진 스냅샷(saveSnapshot/restoreSnapshot).
+// - 글자 크기: 커서가 있는 문단 전체, 또는 "앞으로 입력할 글자"(넣을 때마다 그 글자에 크기를 매김).
+// - 펜: 쪽 위에 투명 캔버스를 덮어 손가락으로 그리고, "완료" 를 누르면 그린 부분만 PNG 로 잘라
+//   그 자리에 "글 앞으로" 떠 있는 그림(종이 기준 위치)으로 넣음. 그 쪽의 본문 문단에 붙이고, 넣은 뒤 그 쪽·그 자리에
+//   그려졌는지, 쪽 수가 그대로인지 확인해서 아니면 되돌림. (표 칸 안 문단에 붙이면 칸 높이가 바뀌어 양식이 틀어짐)
+// - 체크(☑ 버튼): 커서 옆의 □ ○ ☐ 를 ▣ ● ☑ 로 바꾸거나 되돌림 — 글자만 바꾸므로 양식 모양이 그대로.
 import init, { HwpDocument } from './engine/rhwp.js';
 
 const $ = (id) => document.getElementById(id);
@@ -37,6 +42,7 @@ const S = {
   undo: [], redo: [], lastKind: '', lastTime: 0,
   composing: false, comp: null, ignoreInputUntil: 0,
   visible: new Set(),
+  pendingSize: 0,       // "앞으로 입력할 글자" 크기 (HWP 단위: 1pt = 100). 0 이면 없음
 };
 
 // ---------- 공통 ----------
@@ -89,6 +95,7 @@ function applySizes() {
     p.el.style.width = `${p.w * S.scale}px`;
     p.el.style.height = `${p.h * S.scale}px`;
   }
+  if (P.on) redrawAllPenLayers();
 }
 
 /** 쪽 수가 바뀌었을 수 있으니 페이지 상자를 맞추고, 모든 쪽을 "다시 그려야 함" 으로 표시 */
@@ -133,6 +140,7 @@ function renderPage(i) {
   p.el.appendChild(no);
   p.dirty = false;
   if (caretPage === i) p.el.appendChild(caretEl);
+  if (P.on) attachPenLayer(i);
 }
 
 function renderVisible() {
@@ -170,6 +178,7 @@ function placeCaret(scrollIntoView = true) {
     else if (cr.bottom > sr.bottom - 80) scroller.scrollTop += (cr.bottom - (sr.bottom - 80));
   }
   moveIme();
+  updateSizeLabel();
 }
 
 /** 입력칸을 커서 위치(화면 좌표)로 옮김 → 한글 조합창·키보드 제안이 커서 옆에 뜸 */
@@ -204,7 +213,7 @@ function hitAt(pageIndex, x, y) {
 
 pagesBox.addEventListener('click', (e) => {
   const el = e.target.closest('.page');
-  if (!el || !S.doc) return;
+  if (!el || !S.doc || P.on) return;
   const i = +el.dataset.i;
   const r = el.getBoundingClientRect();
   const x = (e.clientX - r.left) / S.scale;
@@ -239,7 +248,23 @@ function insertAt(pos, text) {
   const r = pos.k === 'b'
     ? E(S.doc.insertText(pos.s, pos.p, pos.o, text))
     : E(S.doc.insertTextInCellByPath(pos.s, pos.pp, pathJson(pos), pos.o, text));
+  const start = pos.o;
   pos.o = r.charOffset != null ? r.charOffset : pos.o + text.length;
+  if (S.pendingSize && pos.o > start) applyCharProps(pos, start, pos.o, { fontSize: S.pendingSize });
+}
+/** pos 가 있는 문단의 [start, end) 글자에 서식을 매김 */
+function applyCharProps(pos, start, end, props) {
+  const json = JSON.stringify(props);
+  if (pos.k === 'b') E(S.doc.applyCharFormat(pos.s, pos.p, start, end, json));
+  else E(S.doc.applyCharFormatInCellByPath(pos.s, pos.pp, pathJson(pos), start, end, json));
+}
+/** 커서 자리 글자의 속성 (글자 크기 등) */
+function charPropsAt(pos) {
+  const len = paraLength(pos);
+  const o = Math.max(0, Math.min(pos.o, len) - (pos.o >= len && len > 0 ? 1 : 0));
+  return JSON.parse(pos.k === 'b'
+    ? S.doc.getCharPropertiesAt(pos.s, pos.p, o)
+    : S.doc.getCellCharPropertiesAtByPath(pos.s, pos.pp, pathJson(pos), o));
 }
 function deleteAt(pos, offset, count) {
   if (count <= 0) return;
@@ -464,6 +489,8 @@ function loadDocument(doc, name) {
   S.name = name || '새 문서.hwp';
   S.fmt = extOf(S.name) === 'hwpx' ? 'hwpx' : 'hwp';
   S.undo = []; S.redo = []; S.lastKind = '';
+  S.pendingSize = 0;
+  if (P.on) exitPen();
   for (const p of S.pages) { observer.unobserve(p.el); p.el.remove(); }
   S.pages = []; S.visible.clear();
   S.fit = true;
@@ -604,6 +631,8 @@ window.addEventListener('resize', () => { if (S.doc && S.fit) setZoom(0, true); 
 // ---------- 종료 ----------
 /** 문서를 닫고 첫 화면으로 (브라우저에서 시험할 때 종료 대신) */
 function closeDocument() {
+  if (P.on) exitPen();
+  S.pendingSize = 0;
   for (const p of S.pages) { observer.unobserve(p.el); p.el.remove(); }
   S.pages = []; S.visible.clear();
   S.doc = null; S.pos = null; S.name = '';
@@ -619,6 +648,397 @@ function exitApp() {
   guardUnsaved('종료', () => { if (host) host.exit(); else closeDocument(); });
 }
 
+
+// ---------- 글자 크기 ----------
+const SIZES = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48];
+let sizeScope = 'para';
+const ptText = (hu) => String(Math.round(hu / 10) / 10).replace(/\.0$/, '');
+
+function currentSizeHu() {
+  if (!S.doc || !S.pos) return 0;
+  try { return charPropsAt(S.pos).fontSize || 0; } catch { return 0; }
+}
+function updateSizeLabel() {
+  const hu = S.pendingSize || currentSizeHu();
+  $('szNow').textContent = hu ? ptText(hu) + (S.pendingSize ? '*' : '') : '';
+}
+
+function openSizeSheet() {
+  if (!S.doc || !S.pos) { toast('먼저 문서를 열고 글자를 고칠 곳을 눌러 주세요'); return; }
+  if (P.on) commitPen();
+  if (S.composing) ime.blur();
+  const cur = currentSizeHu();
+  $('sizeCur').textContent = cur ? `· 지금 ${ptText(cur)}pt` : '';
+  const grid = $('sizeGrid');
+  grid.innerHTML = '';
+  for (const pt of SIZES) {
+    const b = document.createElement('button');
+    b.textContent = String(pt);
+    b.dataset.pt = String(pt);
+    const target = sizeScope === 'next' && S.pendingSize ? S.pendingSize : cur;
+    if (target && Math.abs(target - pt * 100) < 1) b.classList.add('cur');
+    grid.appendChild(b);
+  }
+  setScope(sizeScope);
+  $('sizeSheet').hidden = false;
+}
+function setScope(scope) {
+  sizeScope = scope;
+  for (const b of $('sizeScope').querySelectorAll('button')) {
+    const on = b.dataset.scope === scope;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+}
+$('sizeScope').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setScope(b.dataset.scope); });
+$('sizeSheet').addEventListener('click', (e) => {
+  const sheet = $('sizeSheet');
+  const b = e.target.closest('button');
+  if (e.target === sheet || (b && b.id === 'sizeCancel')) { sheet.hidden = true; focusIme(); return; }
+  if (!b || !b.dataset.pt) return;
+  sheet.hidden = true;
+  applySize(+b.dataset.pt);
+});
+
+function applySize(pt) {
+  const hu = Math.round(pt * 100);
+  if (sizeScope === 'next') {
+    S.pendingSize = hu;
+    toast(`이제 입력하는 글자는 ${pt}pt 로 들어가요`);
+    updateSizeLabel();
+    focusIme();
+    return;
+  }
+  const len = paraLength(S.pos);
+  if (!len) {
+    // 빈 줄이면 바꿀 글자가 없으니, 이 줄에 입력할 글자 크기로 정함
+    S.pendingSize = hu;
+    toast(`빈 줄이라 앞으로 입력할 글자를 ${pt}pt 로 할게요`);
+    updateSizeLabel();
+    focusIme();
+    return;
+  }
+  S.pendingSize = 0;
+  edit('format', (pos) => applyCharProps(pos, 0, len, { fontSize: hu }));
+  toast(`이 줄 글자를 ${pt}pt 로 바꿨어요`);
+  focusIme();
+}
+
+// ---------- 체크 표시 (□ ↔ ▣) ----------
+const CHECK = { '□': '▣', '▣': '□', '■': '□', '☐': '☑', '☑': '☐', '☒': '☐', '○': '●', '●': '○', '◯': '●' };
+function charAt(pos, off) {
+  if (off < 0 || off >= paraLength(pos)) return '';
+  return pos.k === 'b' ? S.doc.getTextRange(pos.s, pos.p, off, 1) : S.doc.getTextInCellByPath(pos.s, pos.pp, pathJson(pos), off, 1);
+}
+function toggleCheck() {
+  if (!S.doc || !S.pos) { toast('먼저 체크할 □ 를 눌러 주세요'); return; }
+  if (P.on) { toast('펜을 끝낸 뒤에 써 주세요'); return; }
+  if (S.composing) ime.blur();
+  let at = -1;
+  for (const off of [S.pos.o, S.pos.o - 1]) if (CHECK[charAt(S.pos, off)]) { at = off; break; }
+  if (at < 0) { toast('체크할 □ 바로 옆을 누른 다음 ☑ 버튼을 눌러 주세요'); return; }
+  const to = CHECK[charAt(S.pos, at)];
+  edit('check', (pos) => {
+    const keep = pos.o;
+    const pending = S.pendingSize;
+    S.pendingSize = 0; // 체크 글자는 원래 크기 그대로
+    try {
+      deleteAt(pos, at, 1);
+      const p2 = clone(pos); p2.o = at;
+      insertAt(p2, to);
+    } finally { S.pendingSize = pending; }
+    pos.o = keep;
+  });
+  toast(to === '□' || to === '☐' || to === '○' ? '체크를 풀었어요' : '체크했어요');
+}
+
+// ---------- 펜 (손가락으로 그려서 그림으로 넣기) ----------
+const P = {
+  on: false, color: '#111827', width: 2.5,
+  strokes: new Map(),   // 쪽 번호 → [{color, width, pts:[[x,y]…]}] (쪽 좌표, 화면 확대와 무관)
+  history: [],          // 그린 순서 [{page, stroke}] — "획 지우기" 용
+  layers: new Map(),    // 쪽 번호 → canvas
+  pointers: new Map(),  // pointerId → {x, y, page, stroke}
+  pan: null,            // 두 손가락으로 화면 옮기는 중이면 {x, y}
+};
+
+function enterPen() {
+  if (!S.doc) { toast('먼저 문서를 열어 주세요'); return; }
+  if (S.composing) ime.blur();
+  ime.blur();
+  P.on = true;
+  document.body.classList.add('penOn');
+  $('btnPen').setAttribute('aria-pressed', 'true');
+  $('penBar').hidden = false;
+  for (let i = 0; i < S.pages.length; i++) attachPenLayer(i);
+  toast('손가락으로 그리세요 · 화면 옮기기는 두 손가락 · 다 그리면 "완료"', 3500);
+}
+function exitPen() {
+  P.on = false;
+  document.body.classList.remove('penOn');
+  $('btnPen').setAttribute('aria-pressed', 'false');
+  $('penBar').hidden = true;
+  for (const c of P.layers.values()) c.remove();
+  P.layers.clear(); P.strokes.clear(); P.history = []; P.pointers.clear(); P.pan = null;
+}
+function cancelPen() {
+  const had = P.history.length > 0;
+  exitPen();
+  if (had) toast('그린 것을 넣지 않았어요');
+}
+
+function attachPenLayer(i) {
+  const p = S.pages[i];
+  if (!p) return;
+  let c = P.layers.get(i);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.className = 'penLayer';
+    c.dataset.i = String(i);
+    c.width = 0; c.height = 0; // 실제 그림판 크기는 처음 그릴 때 정함 (쪽이 많아도 가볍게)
+    c.addEventListener('pointerdown', onPenDown);
+    c.addEventListener('pointermove', onPenMove);
+    c.addEventListener('pointerup', onPenUp);
+    c.addEventListener('pointercancel', onPenUp);
+    P.layers.set(i, c);
+  }
+  if (c.parentNode !== p.el) p.el.appendChild(c);
+  if (P.strokes.has(i)) redrawPenLayer(i);
+}
+function sizeLayer(i) {
+  const c = P.layers.get(i); const p = S.pages[i];
+  const dpr = window.devicePixelRatio || 1;
+  // 너무 큰 그림판은 메모리를 많이 써서 한 변 4096 으로 제한
+  const k = Math.min(S.scale * dpr, 4096 / Math.max(p.w, p.h, 1));
+  const w = Math.round(p.w * k), h = Math.round(p.h * k);
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const g = c.getContext('2d');
+  g.setTransform(k, 0, 0, k, 0, 0);
+  return g;
+}
+function strokeStyle(g, st) {
+  g.strokeStyle = st.color; g.fillStyle = st.color; g.lineWidth = st.width;
+  g.lineCap = 'round'; g.lineJoin = 'round';
+}
+function drawStroke(g, st) {
+  strokeStyle(g, st);
+  const pts = st.pts;
+  if (pts.length === 1) { g.beginPath(); g.arc(pts[0][0], pts[0][1], st.width / 2, 0, Math.PI * 2); g.fill(); return; }
+  g.beginPath();
+  g.moveTo(pts[0][0], pts[0][1]);
+  for (let j = 1; j < pts.length; j++) g.lineTo(pts[j][0], pts[j][1]);
+  g.stroke();
+}
+function redrawPenLayer(i) {
+  const c = P.layers.get(i);
+  if (!c) return;
+  const g = sizeLayer(i);
+  g.clearRect(0, 0, S.pages[i].w, S.pages[i].h);
+  for (const st of P.strokes.get(i) || []) drawStroke(g, st);
+}
+function redrawAllPenLayers() { for (const i of P.strokes.keys()) redrawPenLayer(i); }
+
+function pagePoint(e) {
+  const c = e.currentTarget;
+  const r = c.getBoundingClientRect();
+  return [(e.clientX - r.left) / S.scale, (e.clientY - r.top) / S.scale];
+}
+function onPenDown(e) {
+  e.preventDefault();
+  const i = +e.currentTarget.dataset.i;
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
+  P.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, page: i, stroke: null });
+  if (P.pointers.size >= 2) {
+    // 두 손가락: 그리던 획은 취소하고 화면 옮기기
+    for (const ptr of P.pointers.values()) if (ptr.stroke) removeStroke(ptr.page, ptr.stroke);
+    for (const ptr of P.pointers.values()) ptr.stroke = null;
+    P.pan = midpoint();
+    return;
+  }
+  const st = { color: P.color, width: P.width, pts: [pagePoint(e)] };
+  if (!P.strokes.has(i)) P.strokes.set(i, []);
+  P.strokes.get(i).push(st);
+  P.history.push({ page: i, stroke: st });
+  P.pointers.get(e.pointerId).stroke = st;
+  const g = sizeLayer(i);
+  if (P.strokes.get(i).length === 1) g.clearRect(0, 0, S.pages[i].w, S.pages[i].h);
+  drawStroke(g, st);
+}
+function onPenMove(e) {
+  const ptr = P.pointers.get(e.pointerId);
+  if (!ptr) return;
+  e.preventDefault();
+  ptr.x = e.clientX; ptr.y = e.clientY;
+  if (P.pan) {
+    const m = midpoint();
+    scroller.scrollLeft -= m.x - P.pan.x;
+    scroller.scrollTop -= m.y - P.pan.y;
+    P.pan = m;
+    return;
+  }
+  if (!ptr.stroke) return;
+  const pts = ptr.stroke.pts;
+  const [x, y] = pagePoint(e);
+  const [lx, ly] = pts[pts.length - 1];
+  if (Math.hypot(x - lx, y - ly) < 0.6) return;
+  pts.push([x, y]);
+  const g = P.layers.get(ptr.page).getContext('2d');
+  strokeStyle(g, ptr.stroke);
+  g.beginPath(); g.moveTo(lx, ly); g.lineTo(x, y); g.stroke();
+}
+function onPenUp(e) {
+  P.pointers.delete(e.pointerId);
+  if (P.pointers.size < 2) P.pan = null;
+  if (P.pointers.size === 0) for (const i of P.strokes.keys()) if (!P.strokes.get(i).length) P.strokes.delete(i);
+}
+function midpoint() {
+  let x = 0, y = 0;
+  for (const p of P.pointers.values()) { x += p.x; y += p.y; }
+  return { x: x / P.pointers.size, y: y / P.pointers.size };
+}
+function removeStroke(page, st) {
+  const list = P.strokes.get(page) || [];
+  const k = list.indexOf(st);
+  if (k >= 0) list.splice(k, 1);
+  const h = P.history.findIndex((x) => x.stroke === st);
+  if (h >= 0) P.history.splice(h, 1);
+  redrawPenLayer(page);
+}
+
+$('penBar').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.color) {
+    P.color = b.dataset.color;
+    for (const x of $('penBar').querySelectorAll('.pc')) x.classList.toggle('on', x === b);
+  } else if (b.dataset.w) {
+    P.width = +b.dataset.w;
+    for (const x of $('penBar').querySelectorAll('.pw')) x.classList.toggle('on', x === b);
+  }
+});
+$('penUndo').onclick = () => {
+  const last = P.history[P.history.length - 1];
+  if (!last) { toast('지울 획이 없어요'); return; }
+  removeStroke(last.page, last.stroke);
+};
+$('penCancel').onclick = cancelPen;
+$('penDone').onclick = commitPen;
+
+/** 한 쪽에 그린 획들을 감싸는 상자(쪽 좌표)와 PNG */
+async function strokesToPng(list) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const st of list) for (const [x, y] of st.pts) {
+    const r = st.width / 2 + 1;
+    x0 = Math.min(x0, x - r); y0 = Math.min(y0, y - r); x1 = Math.max(x1, x + r); y1 = Math.max(y1, y + r);
+  }
+  const bw = Math.max(4, x1 - x0), bh = Math.max(4, y1 - y0);
+  const k = Math.min(3, 2400 / Math.max(bw, bh)); // 화면보다 선명하게(약 288dpi), 너무 크지 않게
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(bw * k)); c.height = Math.max(1, Math.round(bh * k));
+  const g = c.getContext('2d');
+  g.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+  for (const st of list) drawStroke(g, st);
+  const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+  return { box: { x: x0, y: y0, w: bw, h: bh }, png: new Uint8Array(await blob.arrayBuffer()), natW: c.width, natH: c.height };
+}
+
+/** 쪽 SVG 안의 그림 목록 (넣은 그림을 찾아 실제 자리를 확인하는 데 씀) */
+function pageImages(i) {
+  const svg = S.doc.renderPageSvg(i);
+  const out = [];
+  const re = /<image x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/g;
+  let m;
+  while ((m = re.exec(svg))) out.push({ x: +m[1], y: +m[2], w: +m[3], h: +m[4], key: m[0] });
+  return out;
+}
+/** before 에 없던, 크기가 box 와 같은 그림을 찾음 */
+function findNewImage(i, before, box) {
+  const left = new Map();
+  for (const b of before) left.set(b.key, (left.get(b.key) || 0) + 1);
+  for (const im of pageImages(i)) {
+    const n = left.get(im.key) || 0;
+    if (n > 0) { left.set(im.key, n - 1); continue; }
+    if (Math.abs(im.w - box.w) < 1.5 && Math.abs(im.h - box.h) < 1.5) return im;
+  }
+  return null;
+}
+
+/** 문단 시작이 놓인 쪽 번호 (못 구하면 -1) */
+function paraStartPage(sec, pi) {
+  try { return JSON.parse(S.doc.getCursorRect(sec, pi, 0)).pageIndex; } catch { return -1; }
+}
+/**
+ * 그림을 붙일 본문 문단 후보: 그 쪽에서 시작하는 문단들(앞쪽부터), 그리고 앞 쪽에서 시작해 이 쪽까지 이어진 문단.
+ * 표 칸 안 문단에 그림을 붙이면 칸 높이가 바뀌어 양식이 틀어지므로 본문 문단만 씀.
+ * 문단 시작 쪽은 문서 순서대로 늘어나므로 이분 탐색으로 찾음.
+ */
+function anchorParas(page) {
+  const out = [];
+  const nSec = S.doc.getSectionCount ? S.doc.getSectionCount() : 1;
+  for (let sec = 0; sec < nSec && out.length < 5; sec++) {
+    const n = S.doc.getParagraphCount(sec);
+    if (!n) continue;
+    let lo = 0, hi = n; // 시작 쪽이 page 이상인 첫 문단
+    while (lo < hi) { const mid = (lo + hi) >> 1; const pg = paraStartPage(sec, mid); if (pg >= 0 && pg < page) lo = mid + 1; else hi = mid; }
+    for (let pi = lo; pi < n && out.length < 4; pi++) {
+      if (paraStartPage(sec, pi) !== page) break;
+      out.push({ s: sec, p: pi });
+    }
+    if (lo > 0) out.push({ s: sec, p: lo - 1 });
+  }
+  return out;
+}
+
+const near = (a, b) => Math.abs(a - b) < 1.5;
+
+/** 그림을 page 의 box 자리에 종이 기준으로 "글 앞으로" 띄워 넣음. 성공하면 true (실패하면 문서는 그대로) */
+function placePicture(page, img, anchor) {
+  const { box, png, natW, natH } = img;
+  const wHu = Math.round(box.w * 75), hHu = Math.round(box.h * 75); // 1px = 75 HWPUNIT (96dpi)
+  const snap = S.doc.saveSnapshot();
+  const before = pageImages(page);
+  const pages = S.doc.pageCount();
+  try {
+    const r = E(S.doc.insertPicture(anchor.s, anchor.p, 0, '', png, wHu, hHu, natW, natH, 'png', '펜으로 그린 그림',
+      Math.round(box.x * 75), Math.round(box.y * 75)));
+    E(S.doc.setPictureProperties(anchor.s, r.paraIdx, r.controlIdx, JSON.stringify({ textWrap: 'InFrontOfText', allowOverlap: true })));
+    // 그 쪽, 그 자리에 그려졌고 쪽 수(글 배치)가 바뀌지 않았을 때만 성공
+    const a = findNewImage(page, before, box);
+    if (a && near(a.x, box.x) && near(a.y, box.y) && S.doc.pageCount() === pages) return true;
+  } catch { /* 아래에서 되돌림 */ }
+  try { S.doc.restoreSnapshot(snap); } catch { /* 무시 */ }
+  return false;
+}
+
+async function commitPen() {
+  const pages = [...P.strokes.entries()].filter(([, l]) => l.length);
+  if (!pages.length) { exitPen(); return; }
+  busy(true, '그림을 넣는 중…');
+  let imgs;
+  try {
+    imgs = await Promise.all(pages.map(async ([i, list]) => ({ i, list, ...(await strokesToPng(list)) })));
+  } catch (e) {
+    busy(false);
+    toast(`그림을 만들지 못했어요: ${String(e.message || e)}`);
+    return;
+  }
+  let ok = 0, fail = 0;
+  checkpoint('pen');
+  for (const img of imgs) {
+    if (anchorParas(img.i).some((a) => placePicture(img.i, img, a))) ok++; else fail++;
+  }
+  busy(false);
+  exitPen();
+  if (!ok) {
+    // 아무것도 못 넣었으면 되돌리기 기록도 빼고 문서도 그대로
+    S.undo.pop(); updateUndoButtons();
+    toast('이 쪽은 통째로 표로 되어 있어 그림을 붙일 곳이 없어요. □ 체크는 □ 를 누르고 ☑ 버튼을 쓰세요', 5000);
+    return;
+  }
+  afterEdit(false);
+  toast(fail ? `그림 ${ok}개를 넣었어요 (${fail}쪽은 표로만 되어 있어 넣지 못했어요)` : '그린 것을 문서에 넣었어요 · 되돌리기(↶)로 뺄 수 있어요', 3500);
+}
+
 // ---------- 버튼 ----------
 $('btnExit').onclick = exitApp;
 $('btnOpen').onclick = openFile;
@@ -628,6 +1048,9 @@ $('emptyNew').onclick = newDocument;
 $('btnSave').onclick = openSaveMenu;
 $('btnUndo').onclick = () => { undo(); if (S.pos) focusIme(); };
 $('btnRedo').onclick = () => { redo(); if (S.pos) focusIme(); };
+$('btnSize').onclick = openSizeSheet;
+$('btnCheck').onclick = () => { toggleCheck(); if (S.pos) focusIme(); };
+$('btnPen').onclick = () => { if (P.on) commitPen(); else enterPen(); };
 // 툴바를 눌러도 입력칸 포커스(키보드)가 빠지지 않게
 for (const b of document.querySelectorAll('#bar button')) b.addEventListener('mousedown', (e) => e.preventDefault());
 window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
@@ -648,6 +1071,8 @@ window.hwpApp = {
   /** 뒤로가기: 저장 안 한 내용이 있으면 물어보고 앱을 닫음 */
   handleBack() {
     if (!$('saveMenu').hidden) { $('saveMenu').hidden = true; return; }
+    if (!$('sizeSheet').hidden) { $('sizeSheet').hidden = true; return; }
+    if (P.on) { cancelPen(); return; }
     if (!$('docView').hidden) { $('docView').hidden = true; return; }
     if (!$('unsavedSheet').hidden) { $('unsavedSheet').click(); return; } // 열린 확인 창은 취소
     exitApp();

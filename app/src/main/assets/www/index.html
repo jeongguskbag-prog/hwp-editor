@@ -17,6 +17,10 @@
   <button id="btnUndo" class="tb" title="되돌리기" aria-label="되돌리기" disabled>↶</button>
   <button id="btnRedo" class="tb" title="다시 하기" aria-label="다시 하기" disabled>↷</button>
   <span class="sep"></span>
+  <button id="btnSize" class="tb small" title="글자 크기" aria-label="글자 크기"><span class="szA">가</span><span id="szNow">10</span></button>
+  <button id="btnCheck" class="tb" title="체크 표시 (□ ↔ ▣)" aria-label="체크 표시">☑</button>
+  <button id="btnPen" class="tb" title="펜으로 그리기" aria-label="펜으로 그리기" aria-pressed="false">✏️</button>
+  <span class="sep"></span>
   <button id="btnZoomOut" class="tb" title="축소" aria-label="축소">－</button>
   <button id="btnZoomFit" class="tb small" title="화면 너비에 맞춤" aria-label="화면 너비에 맞춤">맞춤</button>
   <button id="btnZoomIn" class="tb" title="확대" aria-label="확대">＋</button>
@@ -56,6 +60,35 @@
     <button data-c="save">저장</button>
     <button data-c="discard" id="discardBtn" class="danger">저장하지 않고 종료</button>
     <button data-c="cancel" class="ghost">취소</button>
+  </div>
+</div>
+
+<div id="sizeSheet" class="sheet" hidden>
+  <div class="sheetBox">
+    <div class="sheetTitle">글자 크기 <span id="sizeCur" class="muted"></span></div>
+    <div class="seg" id="sizeScope" role="radiogroup" aria-label="바꿀 범위">
+      <button data-scope="para" class="on" role="radio" aria-checked="true">커서가 있는 줄(문단) 전체</button>
+      <button data-scope="next" role="radio" aria-checked="false">앞으로 입력할 글자</button>
+    </div>
+    <div class="sizeGrid" id="sizeGrid"></div>
+    <button data-c="cancel" class="ghost" id="sizeCancel">닫기</button>
+  </div>
+</div>
+
+<div id="penBar" hidden>
+  <div class="penRow">
+    <button class="pc on" data-color="#111827" aria-label="검정" style="--c:#111827"></button>
+    <button class="pc" data-color="#1d4ed8" aria-label="파랑" style="--c:#1d4ed8"></button>
+    <button class="pc" data-color="#dc2626" aria-label="빨강" style="--c:#dc2626"></button>
+    <span class="vsep"></span>
+    <button class="pw" data-w="1.5" aria-label="가늘게"><i style="height:2px"></i></button>
+    <button class="pw on" data-w="2.5" aria-label="보통"><i style="height:4px"></i></button>
+    <button class="pw" data-w="4" aria-label="굵게"><i style="height:6px"></i></button>
+  </div>
+  <div class="penRow">
+    <button id="penUndo" class="pb">획 지우기</button>
+    <button id="penCancel" class="pb ghost">취소</button>
+    <button id="penDone" class="pb main">완료</button>
   </div>
 </div>
 
