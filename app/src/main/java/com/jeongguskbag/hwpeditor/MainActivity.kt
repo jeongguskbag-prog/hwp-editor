@@ -37,12 +37,40 @@ class MainActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor()
 
     @Volatile private var docBytes: ByteArray = ByteArray(0)
+    @Volatile private var imgBytes: ByteArray = ByteArray(0)
     private var pendingSave: ByteArray? = null
     private var pendingOpen: Uri? = null
     private var pageReady = false
 
     private val openDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) loadUri(uri)
+    }
+
+    /** 문서에 넣을 그림 고르기 → /__img__/current 로 넘기고 hwpApp.onImagePicked(mime) 호출 */
+    private val pickImg = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) { js("hwpApp.onImagePicked(null)"); return@registerForActivityResult }
+        io.execute {
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                    val out = ByteArrayOutputStream()
+                    val buf = ByteArray(64 * 1024)
+                    var total = 0
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        total += n
+                        if (total > MAX_IMAGE_BYTES) throw IllegalStateException("too large")
+                        out.write(buf, 0, n)
+                    }
+                    out.toByteArray()
+                } ?: throw IllegalStateException("cannot open")
+                imgBytes = bytes
+                val mime = contentResolver.getType(uri) ?: "image/*"
+                js("hwpApp.onImagePicked(${JSONObject.quote(mime)})")
+            } catch (e: Exception) {
+                runOnUiThread { toast(getString(R.string.image_failed, e.message ?: e.javaClass.simpleName)) }
+            }
+        }
     }
 
     /** 저장할 때 파일 이름과 형식(MIME)을 함께 넘기는 "다른 이름으로 저장" */
@@ -94,6 +122,11 @@ class MainActivity : AppCompatActivity() {
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .addPathHandler("/__doc__/") { _ ->
                 WebResourceResponse("application/octet-stream", null, ByteArrayInputStream(docBytes)).apply {
+                    responseHeaders = mapOf("Cache-Control" to "no-store")
+                }
+            }
+            .addPathHandler("/__img__/") { _ ->
+                WebResourceResponse("application/octet-stream", null, ByteArrayInputStream(imgBytes)).apply {
                     responseHeaders = mapOf("Cache-Control" to "no-store")
                 }
             }
@@ -207,6 +240,9 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun exit() = runOnUiThread { finish() }
+
+        @JavascriptInterface
+        fun pickImage() = runOnUiThread { pickImg.launch("image/*") }
     }
 
     override fun onDestroy() {
@@ -218,5 +254,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val MAX_BYTES = 100L * 1024 * 1024
+        const val MAX_IMAGE_BYTES = 30 * 1024 * 1024
     }
 }

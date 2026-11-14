@@ -17,11 +17,30 @@
   <button id="btnUndo" class="tb" title="되돌리기" aria-label="되돌리기" disabled>↶</button>
   <button id="btnRedo" class="tb" title="다시 하기" aria-label="다시 하기" disabled>↷</button>
   <span class="sep"></span>
+  <button id="btnSize" class="tb small" title="글자 크기" aria-label="글자 크기"><span class="szA">가</span><span id="szNow">10</span></button>
+  <span class="sep"></span>
   <button id="btnZoomOut" class="tb" title="축소" aria-label="축소">－</button>
   <button id="btnZoomFit" class="tb small" title="화면 너비에 맞춤" aria-label="화면 너비에 맞춤">맞춤</button>
   <button id="btnZoomIn" class="tb" title="확대" aria-label="확대">＋</button>
   <div id="title"><span id="docName">문서 없음</span><span id="dirty" hidden> •</span></div>
 </header>
+
+<nav id="tools" aria-label="도구">
+  <button data-tool="edit" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/></svg><span>글자 수정</span></button>
+  <button data-tool="select"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 7-6 2-2 6z"/></svg><span>선택</span></button>
+  <button data-tool="text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg><span>텍스트</span></button>
+  <span class="tsep"></span>
+  <button data-tool="pen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21l4-1L19 8l-3-3L4 17z"/></svg><span>펜</span></button>
+  <button data-tool="hl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 15l-4 4h6l1-1"/><path d="M8 14l7-9 4 4-9 7z"/></svg><span>형광펜</span></button>
+  <button data-tool="area"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="1" fill="currentColor" opacity=".25"/><rect x="3" y="7" width="18" height="10" rx="1"/></svg><span>영역 강조</span></button>
+  <button data-tool="rect"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1"/></svg><span>사각형</span></button>
+  <button data-tool="erase"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21h10"/><path d="M5 15l8-8 6 6-6 6H9z"/></svg><span>지우기</span></button>
+  <span class="tsep"></span>
+  <button data-act="image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg><span>이미지</span></button>
+  <button data-act="sign"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17c3-6 5-9 6-8s-2 8 0 8 3-5 5-5 1 4 3 4 2-2 4-2"/><path d="M3 21h18"/></svg><span>서명</span></button>
+  <button data-act="check"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/></svg><span>체크</span></button>
+</nav>
+<div id="hint">문서를 누르면 그 자리에 커서가 놓여요 · 바로 글자를 고칠 수 있어요</div>
 
 <main id="scroller">
   <div id="empty">
@@ -59,12 +78,48 @@
   </div>
 </div>
 
+<div id="sizeSheet" class="sheet" hidden>
+  <div class="sheetBox">
+    <div class="sheetTitle">글자 크기 <span id="sizeCur" class="muted"></span></div>
+    <div class="seg" id="sizeScope" role="radiogroup" aria-label="바꿀 범위">
+      <button data-scope="para" class="on" role="radio" aria-checked="true">커서가 있는 줄(문단) 전체</button>
+      <button data-scope="next" role="radio" aria-checked="false">앞으로 입력할 글자</button>
+    </div>
+    <div class="sizeGrid" id="sizeGrid"></div>
+    <button data-c="cancel" class="ghost" id="sizeCancel">닫기</button>
+  </div>
+</div>
+
+<div id="penBar" hidden>
+  <div class="penRow" id="penStyle"></div>
+  <div class="penRow">
+    <button id="penUndo" class="pb">하나 지우기</button>
+    <button id="penCancel" class="pb ghost">취소</button>
+    <button id="penDone" class="pb main">완료</button>
+  </div>
+</div>
+
+<div id="signSheet" class="sheet" hidden>
+  <div class="sheetBox">
+    <div class="sheetTitle">서명</div>
+    <div id="signSaved"><div class="muted">저장된 서명 (눌러서 넣기)</div><div id="signList"></div></div>
+    <div class="muted">아래 칸에 손가락으로 서명하세요</div>
+    <canvas id="signPad"></canvas>
+    <div class="seg">
+      <button data-c="clear" class="ghost">다시 쓰기</button>
+      <button data-c="cancel" class="ghost">취소</button>
+      <button data-c="use">저장하고 넣기</button>
+    </div>
+  </div>
+</div>
+
 <div id="docView" class="sheet" hidden>
   <div class="sheetBox docBox"><pre id="docText"></pre><button id="docClose" class="ghost">닫기</button></div>
 </div>
 
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="busy" hidden><div class="spin"></div><span id="busyText">불러오는 중…</span></div>
+<input type="file" id="imageInput" accept="image/*" hidden>
 <input type="file" id="fileInput" accept=".hwp,.hwpx,application/x-hwp,application/haansofthwp,application/vnd.hancom.hwp,application/hwp+zip,application/vnd.hancom.hwpx" hidden>
 
 <script type="module" src="editor.js"></script>
