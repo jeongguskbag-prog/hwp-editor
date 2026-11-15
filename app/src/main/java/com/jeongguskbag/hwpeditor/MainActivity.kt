@@ -225,8 +225,10 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun openFile() = runOnUiThread {
-            // HWP 는 기기마다 형식 이름(MIME)이 달라 모든 파일을 보여 주고, 열 수 있는지는 편집기가 판단
-            openDoc.launch(arrayOf("*/*"))
+            // 파일 선택 화면은 확장자로 거를 수 없어 형식 이름(MIME)으로 거름. HWP 는 기기마다 이름이 달라서
+            // 알려진 이름을 모두 넣고, 형식을 모르는 파일(octet-stream: 휴대폰이 HWP 를 모르면 이렇게 나옴)과
+            // HWPX 가 ZIP 으로 잡히는 경우(application/zip)도 넣음. PDF·사진·문서 같은 다른 파일은 안 보임
+            openDoc.launch(HWP_MIME_TYPES)
         }
 
         @JavascriptInterface
@@ -255,5 +257,10 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val MAX_BYTES = 100L * 1024 * 1024
         const val MAX_IMAGE_BYTES = 30 * 1024 * 1024
+        val HWP_MIME_TYPES = arrayOf(
+            "application/x-hwp", "application/haansofthwp", "application/vnd.hancom.hwp", "application/hwp",
+            "application/hwp+zip", "application/vnd.hancom.hwpx", "application/haansofthwpx", "application/x-hwpx",
+            "application/octet-stream", "application/zip",
+        )
     }
 }
