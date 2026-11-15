@@ -14,7 +14,8 @@
     쪽 전체가 한 표인 쪽에는 넣을 수 없고, 체크란 표시는 "체크"를 안내
 - **HWP 엔진**: [@rhwp/core](https://www.npmjs.com/package/@rhwp/core) 0.9.0 (MIT) — 26MB WebAssembly 라서 저장소에 넣지 않고
   `scripts/fetch-engine.sh` 가 빌드 때 받아 `assets/www/engine/` 에 넣음 (버전·sha512 고정)
-- **안드로이드 앱 (Kotlin)**: `MainActivity.kt` — WebView 하나, 파일 열기·저장은 시스템 파일 선택기.
+- **안드로이드 앱 (Kotlin)**: `MainActivity.kt` — WebView 하나. 열기는 앱 안 목록(처음 한 번 허용한 폴더에서 HWP·HWPX 만 찾아 보여 줌,
+  하위 폴더 3단계·최대 500개) + "다른 방법으로 열기"(시스템 파일 선택기, HWP 형식 이름으로 거름), 저장은 시스템 "다른 이름으로 저장".
   권한 없음(인터넷 권한도 없음). 다른 앱에서 HWP·HWPX "열기" 지원
 
 ## 빌드

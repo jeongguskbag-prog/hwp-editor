@@ -545,8 +545,55 @@ function openBytes(bytes, name) {
 }
 
 function openFile() {
-  guardUnsaved('열기', () => { if (host) host.openFile(); else $('fileInput').click(); });
+  guardUnsaved('열기', () => {
+    if (host && host.listDocs) openDocSheet();      // 앱 안 목록 (HWP·HWPX 만)
+    else if (host) host.openFile();
+    else $('fileInput').click();
+  });
 }
+
+// ---------- 앱 안 열기 목록 ----------
+// 안드로이드 파일 선택 화면은 다른 파일을 흐리게라도 보여 주므로, 허용받은 폴더의 HWP·HWPX 만 앱이 직접 목록으로 보여 줌
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let docList = null;
+function openDocSheet() {
+  $('openBody').innerHTML = '<div class="openEmpty">HWP 문서를 찾는 중…</div>';
+  $('openSheet').hidden = false;
+  host.listDocs();
+}
+function fmtSize(n) { return n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`; }
+function fmtDate(ms) { if (!ms) return ''; const d = new Date(ms); return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`; }
+function renderDocList() {
+  const { folders = [], files = [] } = docList || {};
+  const body = $('openBody');
+  if (!folders.length) {
+    body.innerHTML = `<div class="openEmpty"><p><strong>처음 한 번만, HWP 문서가 있는 폴더를 골라 주세요.</strong></p>
+      <p class="muted">예: Download(다운로드), 카카오톡 받은 파일(Download/KakaoTalk)<br>
+      폴더를 고르는 안드로이드 화면에는 다른 파일도 보이지만, 폴더만 고르면 다음부터는 HWP·HWPX 만 이 목록에 보여요.</p>
+      <button data-c="folder" class="bigBtn">폴더 고르기</button></div>`;
+    return;
+  }
+  let html = files.length ? '<div class="docList">' : '<div class="openEmpty">고른 폴더에 HWP·HWPX 문서가 없어요. "폴더 추가"로 다른 폴더를 더해 보세요.</div>';
+  files.forEach((f, i) => {
+    const hwpx = /\.hwpx$/i.test(f.name);
+    html += `<button class="docItem" data-i="${i}"><span class="docIcon${hwpx ? ' x' : ''}">${hwpx ? 'HWPX' : 'HWP'}</span>
+      <span class="docText"><span class="docName">${esc(f.name)}</span><span class="docMeta">${esc(f.folder)} · ${fmtSize(f.size)} · ${fmtDate(f.modified)}</span></span></button>`;
+  });
+  if (files.length) html += '</div>';
+  html += `<div class="folderRow"><span class="muted">보는 폴더:</span>${folders.map((f, i) => `<span class="chip">${esc(f.label)}<button data-rm="${i}" aria-label="${esc(f.label)} 빼기">✕</button></span>`).join('')}</div>`;
+  body.innerHTML = html;
+}
+$('openSheet').addEventListener('click', (e) => {
+  const sheet = $('openSheet');
+  const item = e.target.closest('.docItem');
+  if (item) { sheet.hidden = true; const f = docList.files[+item.dataset.i]; toast('여는 중…'); host.openUri(f.uri); return; }
+  const rm = e.target.closest('[data-rm]');
+  if (rm) { const f = docList.folders[+rm.dataset.rm]; $('openBody').innerHTML = '<div class="openEmpty">정리하는 중…</div>'; host.removeFolder(f.uri); return; }
+  const b = e.target.closest('button');
+  if (e.target === sheet || (b && b.dataset.c === 'cancel')) { sheet.hidden = true; return; }
+  if (b && b.dataset.c === 'folder') { host.addFolder(); return; }
+  if (b && b.dataset.c === 'system') { sheet.hidden = true; host.openFile(); }
+});
 $('fileInput').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   e.target.value = '';
@@ -1484,6 +1531,15 @@ window.hwpApp = {
     }
   },
   onSaved,
+  /** 앱 안 열기 목록 결과 */
+  onDocList(json) {
+    try { docList = JSON.parse(json); } catch { docList = { folders: [], files: [] }; }
+    if (!$('openSheet').hidden) renderDocList();
+  },
+  /** 폴더를 허용받았으면 목록을 다시 찾음 */
+  onFolderAdded(ok) {
+    if (ok && !$('openSheet').hidden) openDocSheet();
+  },
   /** 앱이 고른 그림을 /__img__/current 로 넣어 두고 부름 (mime 이 없으면 취소) */
   async onImagePicked(mime) {
     if (!mime) return;
@@ -1500,6 +1556,7 @@ window.hwpApp = {
     if (!$('saveMenu').hidden) { $('saveMenu').hidden = true; return; }
     if (!$('sizeSheet').hidden) { $('sizeSheet').hidden = true; return; }
     if (!$('signSheet').hidden) { $('signSheet').hidden = true; return; }
+    if (!$('openSheet').hidden) { $('openSheet').hidden = true; return; }
     if (T.tool !== 'edit') { if (P.history.length) cancelPen(); else setTool('edit', true); return; }
     if (!$('docView').hidden) { $('docView').hidden = true; return; }
     if (!$('unsavedSheet').hidden) { $('unsavedSheet').click(); return; } // 열린 확인 창은 취소
