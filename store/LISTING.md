@@ -31,6 +31,13 @@ HWP 편집기는 HWP·HWPX 문서를 열어 보고, 글을 고치고, 다시 HWP
 • 페이지 모양 그대로 보기, 확대·축소
 • 글 고치기 – 원하는 곳을 눌러 커서를 놓고 한글 입력, 줄바꿈, 지우기
 • 표 칸 편집 – 표 안의 칸(표 안의 표 포함)을 눌러 바로 입력
+• 글자 크기 – 줄 전체를 바꾸거나, 앞으로 입력할 글자 크기를 정하기
+• 체크 표시 – 신청서의 □ 를 눌러 ▣ 로 체크 (○ → ●, ☐ → ☑ 도)
+• 펜·형광펜·영역 강조·사각형 – 손가락으로 표시하고 그 자리에 넣기
+• 지우기 – 가리고 싶은 부분을 흰색으로 덮기
+• 텍스트 – 원하는 자리에 글상자를 만들어 글 쓰기
+• 이미지·서명 – 사진을 넣거나, 손으로 쓴 서명을 저장해 두고 필요한 곳에 넣기
+• 선택 – 넣은 그림·글상자를 끌어서 옮기고 크기를 바꾸거나 지우기
 • 되돌리기·다시 하기
 • HWP 또는 HWPX로 저장 – 원하는 폴더와 이름으로
 
@@ -44,7 +51,8 @@ HWP 편집기는 HWP·HWPX 문서를 열어 보고, 글을 고치고, 다시 HWP
 • 구매하면 모든 기능을 그대로 사용하고, 업데이트도 추가 비용 없이 받습니다.
 
 ■ 알아 두세요
-• 글자 모양(굵게·크기·색) 바꾸기, 범위 선택·복사, 그림 넣기, 표의 행·열 추가는 아직 지원하지 않습니다. 업데이트로 늘려 갈 예정입니다.
+• 굵게·글자색 바꾸기, 범위 선택·복사, 사진 넣기, 표의 행·열 추가는 아직 지원하지 않습니다. 업데이트로 늘려 갈 예정입니다.
+• 쪽 전체가 하나의 표로 된 양식에는 그림·글상자를 넣을 수 없습니다. 체크란 표시는 "체크" 도구를 써 주세요.
 • 복잡한 문서는 화면 모양이 원본과 조금 다를 수 있습니다. 중요한 문서는 저장 후 컴퓨터에서 한 번 확인해 주세요.
 • 이 앱은 한글과컴퓨터와 관계없는 독립 앱입니다. HWP 문서 처리는 오픈소스 엔진 rhwp(MIT 라이선스)를 사용합니다.
 
@@ -62,6 +70,13 @@ HWP Editor opens HWP and HWPX documents, lets you edit the text and saves them b
 • See pages as laid out, zoom in and out
 • Edit text: tap to place the cursor, type Korean, add line breaks, delete
 • Edit table cells, including tables inside tables
+• Font size: change a whole line, or set the size for what you type next
+• Check marks: tap a □ on a form and mark it ▣ (also ○ → ●, ☐ → ☑)
+• Pen, highlighter, area highlight and rectangle: mark up the page with your finger
+• Eraser: cover any part of the page with white
+• Text: add a text box anywhere on the page
+• Image and signature: insert photos, or save your handwritten signature and reuse it
+• Select: move, resize or delete pictures and text boxes
 • Undo and redo
 • Save as HWP or HWPX, with the folder and name you choose
 
@@ -75,7 +90,8 @@ HWP Editor opens HWP and HWPX documents, lets you edit the text and saves them b
 • Your purchase includes every feature and every future update.
 
 ■ Please note
-• Character formatting (bold, size, color), selecting and copying ranges, inserting images and adding table rows or columns are not supported yet. They are planned for future updates.
+• Bold and text color, selecting and copying ranges, inserting photos and adding table rows or columns are not supported yet. They are planned for future updates.
+• Pictures and text boxes cannot be placed on pages that are a single page-sized table. Use the check mark tool for check boxes there.
 • Complex documents may look slightly different from the original. Check important documents on a computer after saving.
 • This is an independent app, not affiliated with Hancom Inc. HWP processing uses the open-source rhwp engine (MIT license).
 

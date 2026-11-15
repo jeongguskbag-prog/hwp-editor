@@ -3,4 +3,5 @@
     <string name="app_name">HWP Editor</string>
     <string name="open_failed">Could not open the file: %1$s</string>
     <string name="too_large">The file is too large to open (max 100 MB).</string>
+    <string name="image_failed">Could not read the picture: %1$s</string>
 </resources>

@@ -3,4 +3,5 @@
     <string name="app_name">HWP 편집기</string>
     <string name="open_failed">파일을 열지 못했어요: %1$s</string>
     <string name="too_large">파일이 너무 커서 열 수 없어요 (최대 100MB).</string>
+    <string name="image_failed">그림을 읽지 못했어요: %1$s</string>
 </resources>

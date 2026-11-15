@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.util.Base64
 import android.webkit.JavascriptInterface
@@ -20,6 +21,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -37,12 +39,98 @@ class MainActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor()
 
     @Volatile private var docBytes: ByteArray = ByteArray(0)
+    @Volatile private var imgBytes: ByteArray = ByteArray(0)
     private var pendingSave: ByteArray? = null
     private var pendingOpen: Uri? = null
     private var pageReady = false
 
     private val openDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) loadUri(uri)
+    }
+
+    /** HWP 가 있는 폴더를 한 번 허용받음 (앱이 기억) → 그 폴더의 HWP·HWPX 만 앱 안 목록으로 보여 줌 */
+    private val pickTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null) {
+            runCatching { contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            js("hwpApp.onFolderAdded(true)")
+        } else {
+            js("hwpApp.onFolderAdded(false)")
+        }
+    }
+
+    /** 허용받은 폴더들에서 HWP·HWPX 찾기 (하위 폴더 3단계까지, 최대 500개, 최근 수정 순) */
+    private fun scanDocs(): String {
+        val files = ArrayList<JSONObject>()
+        val folders = JSONArray()
+        for (perm in contentResolver.persistedUriPermissions) {
+            val tree = perm.uri
+            if (!perm.isReadPermission || !DocumentsContract.isTreeUri(tree)) continue
+            val rootId = runCatching { DocumentsContract.getTreeDocumentId(tree) }.getOrNull() ?: continue
+            val label = rootId.substringAfter(':').ifEmpty { rootId }
+            folders.put(JSONObject().put("uri", tree.toString()).put("label", label))
+            walk(tree, rootId, label, 0, files)
+        }
+        files.sortByDescending { it.optLong("modified") }
+        val arr = JSONArray()
+        files.take(500).forEach { arr.put(it) }
+        return JSONObject().put("folders", folders).put("files", arr).toString()
+    }
+
+    private fun walk(tree: Uri, docId: String, path: String, depth: Int, out: MutableList<JSONObject>) {
+        if (out.size >= 2000) return
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
+        val cols = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val subdirs = ArrayList<Pair<String, String>>()
+        runCatching {
+            contentResolver.query(children, cols, null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getString(0) ?: continue
+                    val name = c.getString(1) ?: continue
+                    val mime = c.getString(2) ?: ""
+                    if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                        if (!name.startsWith(".")) subdirs.add(id to "$path/$name")
+                    } else if (name.lowercase().let { it.endsWith(".hwp") || it.endsWith(".hwpx") }) {
+                        out.add(JSONObject()
+                            .put("uri", DocumentsContract.buildDocumentUriUsingTree(tree, id).toString())
+                            .put("name", name).put("folder", path)
+                            .put("size", if (c.isNull(3)) 0L else c.getLong(3))
+                            .put("modified", if (c.isNull(4)) 0L else c.getLong(4)))
+                    }
+                }
+            }
+        }
+        if (depth < 3) for ((id, p) in subdirs) walk(tree, id, p, depth + 1, out)
+    }
+
+    /** 문서에 넣을 그림 고르기 → /__img__/current 로 넘기고 hwpApp.onImagePicked(mime) 호출 */
+    private val pickImg = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) { js("hwpApp.onImagePicked(null)"); return@registerForActivityResult }
+        io.execute {
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                    val out = ByteArrayOutputStream()
+                    val buf = ByteArray(64 * 1024)
+                    var total = 0
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        total += n
+                        if (total > MAX_IMAGE_BYTES) throw IllegalStateException("too large")
+                        out.write(buf, 0, n)
+                    }
+                    out.toByteArray()
+                } ?: throw IllegalStateException("cannot open")
+                imgBytes = bytes
+                val mime = contentResolver.getType(uri) ?: "image/*"
+                js("hwpApp.onImagePicked(${JSONObject.quote(mime)})")
+            } catch (e: Exception) {
+                runOnUiThread { toast(getString(R.string.image_failed, e.message ?: e.javaClass.simpleName)) }
+            }
+        }
     }
 
     /** 저장할 때 파일 이름과 형식(MIME)을 함께 넘기는 "다른 이름으로 저장" */
@@ -94,6 +182,11 @@ class MainActivity : AppCompatActivity() {
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .addPathHandler("/__doc__/") { _ ->
                 WebResourceResponse("application/octet-stream", null, ByteArrayInputStream(docBytes)).apply {
+                    responseHeaders = mapOf("Cache-Control" to "no-store")
+                }
+            }
+            .addPathHandler("/__img__/") { _ ->
+                WebResourceResponse("application/octet-stream", null, ByteArrayInputStream(imgBytes)).apply {
                     responseHeaders = mapOf("Cache-Control" to "no-store")
                 }
             }
@@ -192,9 +285,32 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun openFile() = runOnUiThread {
-            // HWP 는 기기마다 형식 이름(MIME)이 달라 모든 파일을 보여 주고, 열 수 있는지는 편집기가 판단
-            openDoc.launch(arrayOf("*/*"))
+            // 파일 선택 화면은 확장자로 거를 수 없어 형식 이름(MIME)으로 거름. HWP 는 기기마다 이름이 달라서
+            // 알려진 이름을 모두 넣고, 형식을 모르는 파일(octet-stream: 휴대폰이 HWP 를 모르면 이렇게 나옴)과
+            // HWPX 가 ZIP 으로 잡히는 경우(application/zip)도 넣음. PDF·사진·문서 같은 다른 파일은 안 보임
+            openDoc.launch(HWP_MIME_TYPES)
         }
+
+        /** 앱 안 열기 목록용: 결과는 hwpApp.onDocList(json) 으로 */
+        @JavascriptInterface
+        fun listDocs() {
+            io.execute {
+                val json = runCatching { scanDocs() }.getOrElse { "{\"folders\":[],\"files\":[]}" }
+                js("hwpApp.onDocList(${JSONObject.quote(json)})")
+            }
+        }
+
+        @JavascriptInterface
+        fun addFolder() = runOnUiThread { pickTree.launch(null) }
+
+        @JavascriptInterface
+        fun removeFolder(uri: String) {
+            runCatching { contentResolver.releasePersistableUriPermission(Uri.parse(uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            listDocs()
+        }
+
+        @JavascriptInterface
+        fun openUri(uri: String) = runOnUiThread { loadUri(Uri.parse(uri)) }
 
         @JavascriptInterface
         fun saveFile(base64: String, name: String, mime: String) {
@@ -207,6 +323,9 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun exit() = runOnUiThread { finish() }
+
+        @JavascriptInterface
+        fun pickImage() = runOnUiThread { pickImg.launch("image/*") }
     }
 
     override fun onDestroy() {
@@ -218,5 +337,11 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val MAX_BYTES = 100L * 1024 * 1024
+        const val MAX_IMAGE_BYTES = 30 * 1024 * 1024
+        val HWP_MIME_TYPES = arrayOf(
+            "application/x-hwp", "application/haansofthwp", "application/vnd.hancom.hwp", "application/hwp",
+            "application/hwp+zip", "application/vnd.hancom.hwpx", "application/haansofthwpx", "application/x-hwpx",
+            "application/octet-stream", "application/zip",
+        )
     }
 }
