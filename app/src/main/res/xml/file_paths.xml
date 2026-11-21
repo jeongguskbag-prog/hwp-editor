@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 보내기용 PDF 만 (cache/share) -->
+    <cache-path name="share" path="share/" />
+</paths>
