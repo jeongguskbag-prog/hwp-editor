@@ -16,10 +16,15 @@
 //   그 자리에 "글 앞으로" 떠 있는 그림(종이 기준 위치)으로 넣음. 그 쪽의 본문 문단에 붙이고, 넣은 뒤 그 쪽·그 자리에
 //   그려졌는지, 쪽 수가 그대로인지 확인해서 아니면 되돌림. (표 칸 안 문단에 붙이면 칸 높이가 바뀌어 양식이 틀어짐)
 // - 체크(☑ 버튼): 커서 옆의 □ ○ ☐ 를 ▣ ● ☑ 로 바꾸거나 되돌림 — 글자만 바꾸므로 양식 모양이 그대로.
-import init, { HwpDocument } from './engine/rhwp.js';
+// 다른 앱(모아노트) 안에 끼워 쓸 때: index.html?embed=1&engine=../engine/ — 부모 창과 postMessage 로 문서를 주고받음
+const PARAMS = new URLSearchParams(location.search);
+const EMBED = PARAMS.get('embed') === '1' && window.parent !== window;
+const ENGINE = PARAMS.get('engine') || './engine/';
+let init = null, HwpDocument = null; // 엔진은 시작할 때 ENGINE 에서 읽음
 
 const $ = (id) => document.getElementById(id);
-const host = window.HwpHost || null; // 안드로이드 앱이 넣어 주는 다리(MainActivity.kt). 브라우저에서는 없음
+// 안드로이드 앱이 넣어 주는 다리(MainActivity.kt). 브라우저·끼워 쓸 때는 없음 (끼워 쓸 때는 부모 앱이 저장을 맡음)
+const host = EMBED ? null : (window.HwpHost || null);
 const SENT = '​';
 const scroller = $('scroller');
 const pagesBox = $('pages');
@@ -616,6 +621,7 @@ function createNewDocument() {
 
 function openSaveMenu() {
   if (!S.doc) { toast('먼저 문서를 열어 주세요'); return; }
+  if (EMBED) { embedSave(); return; }
   $('saveMenu').hidden = false;
 }
 $('saveMenu').addEventListener('click', (e) => {
@@ -760,7 +766,7 @@ document.addEventListener('click', async (e) => {
   const a = e.target.closest('a[data-doc]');
   if (!a) return;
   e.preventDefault();
-  try { $('docText').textContent = await (await fetch(a.dataset.doc)).text(); }
+  try { $('docText').textContent = await (await fetch(a.dataset.doc.replace(/^engine\//, ENGINE))).text(); }
   catch { $('docText').textContent = '불러오지 못했어요'; }
   $('docView').hidden = false;
 });
@@ -802,7 +808,30 @@ function closeDocument() {
   $('empty').hidden = false;
 }
 function exitApp() {
+  if (EMBED) { guardUnsaved('닫기', () => parent.postMessage({ type: 'hwp-close' }, location.origin)); return; }
   guardUnsaved('종료', () => { if (host) host.exit(); else closeDocument(); });
+}
+
+// ---------- 끼워 쓰기 (모아노트 등) ----------
+/** 고친 문서를 원래 형식(HWP/HWPX)으로 부모 앱에 넘김. "저장하고 닫기" 면 이어서 닫음 */
+function embedSave() {
+  if (S.composing) ime.blur();
+  let bytes;
+  try { bytes = S.fmt === 'hwpx' ? S.doc.exportHwpx() : S.doc.exportHwp(); }
+  catch (e) { toast(`저장하지 못했어요: ${String(e.message || e)}`, 4000); return; }
+  parent.postMessage({ type: 'hwp-saved', bytes: bytes.buffer, fmt: S.fmt, name: S.name }, location.origin, [bytes.buffer]);
+  setDirty(false);
+  toast('노트에 반영했어요');
+  const next = S.afterSave;
+  S.afterSave = null;
+  if (next) setTimeout(next, 300);
+}
+if (EMBED) {
+  document.body.classList.add('embed');
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.type === 'hwp-open') openBytes(new Uint8Array(e.data.bytes), e.data.name || '문서.hwp');
+  });
 }
 
 
@@ -1655,9 +1684,12 @@ window.hwpApp = {
 (async () => {
   busy(true, '편집기를 준비하는 중…');
   try {
-    await init({ module_or_path: new URL('./engine/rhwp_bg.wasm', import.meta.url) });
+    const engine = await import(new URL(`${ENGINE}rhwp.js`, location.href).href);
+    init = engine.default; HwpDocument = engine.HwpDocument;
+    await init({ module_or_path: new URL(`${ENGINE}rhwp_bg.wasm`, location.href) });
     window.hwpApp.ready = true;
     if (host && host.onReady) host.onReady();
+    if (EMBED) parent.postMessage({ type: 'hwp-ready' }, location.origin);
   } catch (e) {
     toast(`편집기를 불러오지 못했어요: ${String(e.message || e)}`, 8000);
   } finally {

@@ -141,3 +141,6 @@ body.drawing #toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
 .sheetBox .chip button { padding: 0 6px; background: transparent; color: #6b7280; font-size: 12px; }
 .sheetTitle.sub { margin-top: 6px; font-size: 13px; color: #6b7280; font-weight: 600; }
 .sheetBox button.pdfBtn { background: #0f766e; }
+
+/* 다른 앱 안에 끼워 쓸 때: 열기·새 문서 대신 부모 앱이 문서를 넘겨줌. 저장(💾)은 '노트에 반영' */
+body.embed #btnOpen, body.embed #btnNew, body.embed .emptyBtns { display: none; }
