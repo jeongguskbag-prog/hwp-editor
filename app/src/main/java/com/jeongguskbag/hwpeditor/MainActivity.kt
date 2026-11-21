@@ -1,6 +1,7 @@
 package com.jeongguskbag.hwpeditor
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -17,6 +18,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
@@ -25,6 +27,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.concurrent.Executors
 
 /**
@@ -271,6 +274,23 @@ class MainActivity : AppCompatActivity() {
         }
     }.getOrNull()
 
+    private fun sendPdf(uri: Uri, name: String, toNotes: Boolean) {
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("application/pdf")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_TITLE, name)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        if (toNotes) {
+            try {
+                startActivity(Intent(send).setPackage(SAMSUNG_NOTES))
+                return
+            } catch (e: ActivityNotFoundException) {
+                toast(getString(R.string.notes_missing))
+            }
+        }
+        startActivity(Intent.createChooser(send, name))
+    }
+
     private fun js(code: String) = runOnUiThread { web.evaluateJavascript(code, null) }
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
@@ -312,6 +332,26 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun openUri(uri: String) = runOnUiThread { loadUri(Uri.parse(uri)) }
 
+        /**
+         * PDF 를 다른 앱으로 보냄. target == "notes" 면 삼성 노트로 바로 (삼성 노트는 공유받은 PDF 로 새 노트를 만듦),
+         * 없으면 앱 고르기 화면으로.
+         */
+        @JavascriptInterface
+        fun sharePdf(base64: String, name: String, target: String) {
+            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            io.execute {
+                try {
+                    val dir = File(cacheDir, "share").apply { deleteRecursively(); mkdirs() }
+                    val safe = name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                    val file = File(dir, safe).apply { writeBytes(bytes) }
+                    val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file)
+                    runOnUiThread { sendPdf(uri, safe, target == "notes") }
+                } catch (e: Exception) {
+                    runOnUiThread { toast(getString(R.string.share_failed, e.message ?: e.javaClass.simpleName)) }
+                }
+            }
+        }
+
         @JavascriptInterface
         fun saveFile(base64: String, name: String, mime: String) {
             val bytes = Base64.decode(base64, Base64.DEFAULT)
@@ -338,6 +378,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val MAX_BYTES = 100L * 1024 * 1024
         const val MAX_IMAGE_BYTES = 30 * 1024 * 1024
+        const val SAMSUNG_NOTES = "com.samsung.android.app.notes"
         val HWP_MIME_TYPES = arrayOf(
             "application/x-hwp", "application/haansofthwp", "application/vnd.hancom.hwp", "application/hwp",
             "application/hwp+zip", "application/vnd.hancom.hwpx", "application/haansofthwpx", "application/x-hwpx",

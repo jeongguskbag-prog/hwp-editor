@@ -139,3 +139,5 @@ body.drawing #toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
 .folderRow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 2px 2px; font-size: 12px; }
 .chip { display: inline-flex; align-items: center; gap: 2px; padding: 3px 4px 3px 10px; border-radius: 999px; background: #e5e7eb; color: #111827; }
 .sheetBox .chip button { padding: 0 6px; background: transparent; color: #6b7280; font-size: 12px; }
+.sheetTitle.sub { margin-top: 6px; font-size: 13px; color: #6b7280; font-weight: 600; }
+.sheetBox button.pdfBtn { background: #0f766e; }

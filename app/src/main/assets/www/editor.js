@@ -624,6 +624,7 @@ $('saveMenu').addEventListener('click', (e) => {
   $('saveMenu').hidden = true;
   const fmt = b ? b.dataset.fmt : 'cancel';
   if (fmt === 'cancel') { S.afterSave = null; return; }
+  if (fmt === 'pdf' || fmt === 'notes' || fmt === 'share') { exportPdf(fmt === 'pdf' ? 'save' : fmt); return; }
   saveAs(fmt === 'same' ? S.fmt : fmt);
 });
 
@@ -654,6 +655,13 @@ function saveAs(fmt) {
 }
 
 function onSaved(ok, nameOrMsg) {
+  if (S.savingPdf) {
+    // PDF 저장은 문서 이름·저장 상태를 바꾸지 않음
+    S.savingPdf = false;
+    if (ok) toast(`PDF 를 저장했어요: ${nameOrMsg}`);
+    else if (nameOrMsg) toast(`저장하지 못했어요: ${nameOrMsg}`, 4000);
+    return;
+  }
   if (ok) {
     S.name = nameOrMsg || S.name;
     S.fmt = extOf(S.name) === 'hwpx' ? 'hwpx' : 'hwp';
@@ -667,6 +675,84 @@ function onSaved(ok, nameOrMsg) {
     S.afterSave = null; // 저장 실패·취소면 종료 등은 하지 않음
     if (nameOrMsg) toast(`저장하지 못했어요: ${nameOrMsg}`, 4000);
   }
+}
+
+
+// ---------- PDF 로 내보내기 (삼성 노트 등 HWP 를 못 여는 앱으로 보내기) ----------
+// 엔진에 PDF 저장이 없어서, 쪽마다 SVG 를 그림(2배, 약 192dpi)으로 그린 뒤 JPEG 로 묶어 PDF 를 만듦.
+// 글자는 그림이 되므로 PDF 안에서 글자 검색·복사는 안 됨 (보기·펜으로 쓰기용).
+async function pageJpeg(i) {
+  const p = S.pages[i];
+  let svg = S.doc.renderPageSvg(i);
+  // <img> 로 그리려면 크기가 있어야 함
+  svg = svg.replace(/<svg\b([^>]*)>/, (m, a) => `<svg${a.replace(/\s(width|height)="[^"]*"/g, '')} width="${p.w}" height="${p.h}">`);
+  if (!/xmlns=/.test(svg.slice(0, 300))) svg = svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error(`${i + 1}쪽을 그리지 못했어요`)); img.src = url; });
+    const k = 2;
+    const c = document.createElement('canvas');
+    c.width = Math.round(p.w * k); c.height = Math.round(p.h * k);
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.88));
+    return { jpeg: new Uint8Array(await blob.arrayBuffer()), pxW: c.width, pxH: c.height, ptW: p.w * 0.75, ptH: p.h * 0.75 }; // 96dpi px → pt
+  } finally { URL.revokeObjectURL(url); }
+}
+function buildPdf(pages) {
+  const enc = new TextEncoder();
+  const chunks = []; let len = 0; const offs = [];
+  const put = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; chunks.push(b); len += b.length; };
+  const obj = (n, body) => { offs[n] = len; put(`${n} 0 obj\n`); for (const b of [].concat(body)) put(b); put('\nendobj\n'); };
+  put('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n'.replace(/[\u0080-ÿ]/g, ''));
+  const n = pages.length;
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ')}] /Count ${n} >>`);
+  pages.forEach((pg, i) => {
+    const po = 3 + i * 3, co = po + 1, io = po + 2;
+    const w = pg.ptW.toFixed(2), h = pg.ptH.toFixed(2);
+    obj(po, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /XObject << /Im0 ${io} 0 R >> >> /Contents ${co} 0 R >>`);
+    const content = `q ${w} 0 0 ${h} 0 0 cm /Im0 Do Q`;
+    obj(co, [`<< /Length ${content.length} >>\nstream\n`, content, '\nendstream']);
+    obj(io, [`<< /Type /XObject /Subtype /Image /Width ${pg.pxW} /Height ${pg.pxH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.jpeg.length} >>\nstream\n`, pg.jpeg, '\nendstream']);
+  });
+  const xref = len;
+  const total = 3 + n * 3;
+  let x = `xref\n0 ${total}\n0000000000 65535 f \n`;
+  for (let k = 1; k < total; k++) x += `${String(offs[k]).padStart(10, '0')} 00000 n \n`;
+  put(x);
+  put(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(len); let o = 0;
+  for (const b of chunks) { out.set(b, o); o += b.length; }
+  return out;
+}
+async function makePdf() {
+  if (S.composing) ime.blur();
+  if (P.on && P.history.length) await finishDrawing();
+  const pages = [];
+  for (let i = 0; i < S.pages.length; i++) {
+    busy(true, `PDF 만드는 중… ${i + 1} / ${S.pages.length}`);
+    pages.push(await pageJpeg(i));
+  }
+  return buildPdf(pages);
+}
+/** target: 'save' 파일로 저장 · 'notes' 삼성 노트로 보내기 · 'share' 다른 앱으로 */
+async function exportPdf(target) {
+  if (!S.doc) { toast('먼저 문서를 열어 주세요'); return; }
+  let bytes;
+  try { bytes = await makePdf(); }
+  catch (e) { toast(`PDF 를 만들지 못했어요: ${String(e.message || e)}`, 4000); return; }
+  finally { busy(false); }
+  const name = `${S.name.replace(/\.(hwpx?|HWPX?)$/, '') || '문서'}.pdf`;
+  if (host && target !== 'save' && host.sharePdf) { host.sharePdf(bytesToBase64(bytes), name, target === 'notes' ? 'notes' : ''); return; }
+  if (host) { S.afterSave = null; S.savingPdf = true; host.saveFile(bytesToBase64(bytes), name, 'application/pdf'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(`PDF 를 만들었어요: ${name}`);
 }
 
 // ---------- 라이선스 보기 (페이지를 떠나지 않고 패널로) ----------
